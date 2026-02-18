@@ -10,36 +10,55 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 def analyze_conversation(text):
-    prompt = f"""
-Return ONLY valid JSON in this format:
-{{
-  "sentiment": "Positive | Neutral | Negative | Agitated",
-  "category": "Machine Operation Issues | Maintenance & Parts | Technical Troubleshooting",
-  "search_query": "short technical search query"
-}}
-Conversation:
-{text}
-"""
     try:
         response = client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=prompt,
+            contents=text,
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": {
+                    "type": "object",
+                    "properties": {
+                        "sentiment": {
+                            "type": "string",
+                            "enum": [
+                                "Positive",
+                                "Neutral",
+                                "Negative",
+                                "Agitated"
+                            ]
+                        },
+                        "category": {
+                            "type": "string",
+                            "enum": [
+                                "Machine Operation Issues",
+                                "Maintenance & Parts",
+                                "Technical Troubleshooting"
+                            ]
+                        },
+                        "search_query": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "sentiment",
+                        "category",
+                        "search_query"
+                    ]
+                }
+            }
         )
-        raw = response.text.strip()
-        if not raw:
-            print(" Gemini returned empty response")
-            return None
-        raw = raw.replace("```json", "").replace("```", "").strip()
-        return json.loads(raw)
+
+        return response.parsed  # Direct dict, no json.loads()
     except Exception as e:
-        print(" Gemini JSON parse error:", e)
-        print("Raw response:", response.text if 'response' in locals() else "None")
+        print("Gemini schema error:", e)
         return None
 
 def get_embedding(text):
     response = client.models.embed_content(
         model="gemini-embedding-001",
         contents=text
+        config={"output_dimensionality": 768}
     )
     return response.embeddings[0].values
 
